@@ -79,7 +79,7 @@
       {
         "id": "autoresearch",
         "name": "Autoresearch",
-        "workspace": "~/.openclaw/agents/autoresearch/workspace"
+        "workspace": "~/.openclaw/workspace-autoresearch"
       },
       {
         "id": "paper-review",
