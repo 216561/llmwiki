@@ -80,6 +80,10 @@
         "id": "autoresearch",
         "name": "Autoresearch",
         "workspace": "~/.openclaw/agents/autoresearch/workspace"
+      },
+      {
+        "id": "paper-review",
+        "workspace": "/home/node/.openclaw/workspace-paper-review"
       }
     ]
   },
@@ -220,7 +224,7 @@
         {
           "path": ".",
           "name": "workspace",
-          "pattern": "**/*.md"
+          "pattern": "workspace*/**/*.md"
         }
       ]
     }

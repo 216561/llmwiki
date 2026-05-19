@@ -17,6 +17,7 @@ This repo follows OpenClaw's hub-and-spoke multi-agent pattern. The main agent (
 - **canvas/index.html** — OpenClaw Canvas web UI.
 - **workspace/** — Main agent (颖姗) working directory. Contains SOUL.md, AGENTS.md, IDENTITY.md, USER.md, TOOLS.md, MEMORY.md, HEARTBEAT.md, DREAMS.md. See [docs](https://docs.openclaw.ai/concepts/agent-workspace).
 - **agents/autoresearch/workspace/** — Sub-agent workspace for the Autoresearch agent. Contains SOUL.md, AGENTS.md (the research paper wiki operating manual), and IDENTITY.md. This agent is spawned by 颖姗 for paper ingest, literature queries, cross-paper comparison, and wiki quality auditing.
+- **workspace-paper-review/** — Agent workspace for paper review and validation experiment design. Contains SOUL.md, AGENTS.md, USER.md, memory/, and skills/ for the 5-stage paper analysis pipeline.
 
 ## Key Configuration Details
 
@@ -59,4 +60,4 @@ openclaw pairing approve feishu <CODE>
 
 ## Gitignore Strategy
 
-`.env` and `auth-profiles.json` contain secrets — never track them. Runtime data (`logs/`, `tasks/`, `*.sqlite`), QMD caches (`qmd/`, `agents/*/qmd/`), CLI-managed dirs (`extensions/`), and channel data (`qqbot/`) are excluded. `skills/` and `workspace/` are tracked. `openclaw.json` is tracked because all tokens are env var references.
+`.env` and `auth-profiles.json` contain secrets — never track them. Runtime data (`logs/`, `tasks/`, `*.sqlite`), QMD caches (`qmd/`, `agents/*/qmd/`), CLI-managed dirs (`extensions/`), and channel data (`qqbot/`) are excluded. Agent workspaces and their checked-in skills are tracked, while runtime state inside those workspaces is ignored. `openclaw.json` is tracked because all tokens are env var references.
