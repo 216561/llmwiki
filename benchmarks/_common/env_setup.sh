@@ -139,14 +139,37 @@ log "repo copied into container"
 # noisily with 'No API key found for provider "minimax"' if the secret
 # is missing.
 if [[ -n "${MINIMAX_API_KEY:-}" ]]; then
-  log "writing minimax auth profile via openclaw CLI"
+  log "writing auth-profiles.json (env-var reference, no secret in file)"
+  # Per docs.openclaw.ai/concepts/oauth, the `key` field in
+  # auth-profiles.json is the *name of an environment variable* that
+  # openclaw will read at runtime -- NOT the secret value itself. So we
+  # write a tiny JSON that points at $MINIMAX_API_KEY, and the file
+  # contains no secret material. init.sh already forwards
+  # $MINIMAX_API_KEY into the container's env, but the gateway's
+  # credential lookup reads from this file's `key` field name.
   docker exec -e MINIMAX_API_KEY \
     "${CONTAINER}" bash -lc '
       export HOME=/home/node
-      export OPENCLAW_AGENT_DIR=/home/node/.openclaw/agents/main
-      printf "%s" "$MINIMAX_API_KEY" | openclaw models auth paste-api-key \
-        --provider minimax --agent main \
-        || echo "openclaw models auth paste-api-key failed; will rely on init.sh sync"
+      mkdir -p /home/node/.openclaw/agents/main/agent
+      # Build the JSON with jq-style escaping. Using printf + sed keeps
+      # the file structure static (no $MINIMAX_API_KEY interpolation that
+      # could leak the secret into argv or logs).
+      cat > /home/node/.openclaw/agents/main/agent/auth-profiles.json <<'\''JSON'\''
+{
+  "version": 1,
+  "profiles": {
+    "minimax:default": {
+      "type": "api_key",
+      "provider": "minimax",
+      "key": "MINIMAX_API_KEY"
+    }
+  }
+}
+JSON
+      chown -R 1000:1000 /home/node/.openclaw/agents/main/agent
+      chmod 600 /home/node/.openclaw/agents/main/agent/auth-profiles.json
+      echo "wrote auth-profiles.json:"
+      ls -la /home/node/.openclaw/agents/main/agent/
     ' || true
 else
   log "MINIMAX_API_KEY not set; skipping explicit auth-profiles write"

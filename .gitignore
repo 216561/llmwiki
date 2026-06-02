@@ -76,6 +76,7 @@ benchmarks/**/output/
 benchmarks/**/bench-report.json
 bench-results/
 .bench-runtime/
+.bench-runtime/.env.bench
 **/__pycache__/
 
 # === Sensitive user data ===
