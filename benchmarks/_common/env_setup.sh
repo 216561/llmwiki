@@ -84,17 +84,32 @@ CONTAINER="$(docker ps --filter "label=com.docker.compose.project=${COMPOSE_PROJ
 [[ -n "${CONTAINER}" ]] || die "no container found for project ${COMPOSE_PROJECT}"
 log "container: ${CONTAINER}"
 
-# 5. Rsync the repo into the mounted data dir so the container sees the
-#    checked-out tree at /home/node/.openclaw.
-log "rsyncing repo into ${ENV_DIR}/openclaw-data"
-rsync -a --delete \
-  --exclude='.git/' --exclude='.github/' --exclude='.env' \
-  --exclude='*.sqlite*' --exclude='qmd/' --exclude='logs/' \
-  --exclude='tasks/' --exclude='credentials/' --exclude='cron/' \
-  --exclude='devices/' --exclude='identity/' --exclude='feishu/' \
-  --exclude='extensions/' --exclude='qqbot/' --exclude='.openclaw/' \
-  --exclude='.dreams/' --exclude='dreaming/' --exclude='.bench-runtime/' \
-  "${ROOT}/" "${ENV_DIR}/openclaw-data/"
+# 5. Copy the repo into the container's /home/node/.openclaw so the openclaw
+#    gateway sees the checked-out tree. We use `docker cp` rather than a
+#    host-side rsync into the docker volume because the runner user can't
+#    write into the volume (root-owned), and `docker cp` is unprivileged.
+log "docker cp repo into ${CONTAINER}:/home/node/.openclaw"
+# Clear any pre-existing files inside the mount (except hidden .openclaw
+# artifacts the image may have placed there).
+docker exec "${CONTAINER}" bash -lc '
+  set -e
+  cd /home/node/.openclaw
+  # remove everything except the directory itself so hidden runtime state
+  # (extensions/, qmd/, etc.) created by the image stays intact.
+  find . -mindepth 1 -delete 2>/dev/null || true
+'
+# Stream a tarball of the repo (with the same excludes) and untar inside the
+# container. This avoids needing host-side write access to the volume.
+tar --exclude='.git' --exclude='.github' --exclude='.env' \
+    --exclude='*.sqlite*' --exclude='qmd' --exclude='logs' \
+    --exclude='tasks' --exclude='credentials' --exclude='cron' \
+    --exclude='devices' --exclude='identity' --exclude='feishu' \
+    --exclude='extensions' --exclude='qqbot' --exclude='.openclaw' \
+    --exclude='.dreams' --exclude='dreaming' --exclude='.bench-runtime' \
+    --exclude='bench-results' \
+    -C "${ROOT}" -cf - . | \
+  docker exec -i "${CONTAINER}" tar -xf - -C /home/node/.openclaw
+log "repo copied into container"
 
 # 6. Health check: `openclaw --local health` from inside the container.
 log "waiting for openclaw CLI inside ${CONTAINER}"
