@@ -78,8 +78,12 @@ def run_agent(container: str, agent_id: str, qa: dict, run_id: str,
             f"---\n\n{prompt}"
         )
     session_key = f"agent:{agent_id}:bench-{run_id}-{qa['qa_id']}"
+    # Propagate the LLM provider credentials into the container. Without
+    # these the embedded openclaw agent cannot reach the model.
     cmd = [
-        "docker", "exec", "-i", container, "openclaw", "agent",
+        "docker", "exec", "-i",
+        "-e", "MINIMAX_API_KEY", "-e", "MINIMAX_BASE_URL",
+        container, "openclaw", "agent",
         "--agent", agent_id, "--message", prompt, "--json", "--local",
         "--session-key", session_key,
         "--timeout", str(qa.get("timeout_seconds", 1800)),
@@ -130,6 +134,13 @@ def main(bench_name: str, agent_id: str | None = None) -> int:
             # LLM judge still calls main for consistency with the dispatch path.
             verdict = (judge_with_agent(qa, answer, agent_id="main", model=model)
                        if mode == "agent" else judge_with_rules(answer, qa))
+            # Debug: surface the first 200 chars of the agent's reply so
+            # zero-score failures are easy to diagnose from CI logs.
+            head = (answer or "").replace("\n", "\\n")[:200]
+            print(f"  [{qa['qa_id']}] score={verdict.get('score', 0):.3f} "
+                  f"pass={verdict.get('pass', False)} "
+                  f"len(answer)={len(answer or '')} head={head!r}",
+                  file=sys.stderr)
             results.append({
                 "qa_id": qa["qa_id"], "task_type": qa.get("task_type"),
                 "target_agent": qa.get("target_agent"),
