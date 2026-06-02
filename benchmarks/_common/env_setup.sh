@@ -126,6 +126,15 @@ tar --exclude='.git' --exclude='.github' --exclude='.env' \
 # The files we just streamed in are owned by root (since `docker exec tar`
 # runs as the container's user -- which is root here -- and tar preserves
 # host uids). The gateway then fails to write logs/, qmd/, .config/, etc.
+# OpenClaw stores session files under agents/<agentId>/sessions, including
+# sessions_spawn child-agent state, so create those dirs before chowning.
+log "creating agent session dirs"
+docker exec "${CONTAINER}" bash -lc '
+  set -e
+  for agent_id in main autoresearch paper-review idea-generate; do
+    mkdir -p "/home/node/.openclaw/agents/${agent_id}/sessions"
+  done
+'
 # chown the whole tree to uid 1000:1000 to match the runtime user.
 log "chown /home/node/.openclaw -> 1000:1000 (openclaw runtime uid)"
 docker exec "${CONTAINER}" chown -R 1000:1000 /home/node/.openclaw || true

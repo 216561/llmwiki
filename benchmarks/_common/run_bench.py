@@ -25,6 +25,7 @@ import re
 import subprocess
 import sys
 import time
+import uuid
 from pathlib import Path
 
 # Allow `python3 -m` and direct invocation both.
@@ -35,6 +36,49 @@ else:
     from .judge import judge_with_agent, judge_with_rules  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+def repair_container_permissions(container: str) -> None:
+    """Make benchmark-created runtime files writable by OpenClaw's node user.
+
+    The benchmark env.sh scripts stage fixtures with `docker exec` / `docker cp`,
+    which creates root-owned files in the mounted ~/.openclaw tree. OpenClaw
+    stores per-agent sessions at ~/.openclaw/agents/<agentId>/sessions/*.jsonl
+    and the gateway/embedded agents write them as uid 1000 in the benchmark
+    image, so repair ownership before sending benchmark turns.
+    """
+    mount = os.environ.get("BENCH_MOUNT", "/home/node/.openclaw")
+    script = r'''
+set -e
+: "${BENCH_MOUNT:=/home/node/.openclaw}"
+for agent_id in main autoresearch paper-review idea-generate; do
+  mkdir -p "${BENCH_MOUNT}/agents/${agent_id}/sessions"
+done
+for path in \
+  "${BENCH_MOUNT}/agents" \
+  "${BENCH_MOUNT}/workspace" \
+  "${BENCH_MOUNT}"/workspace-* \
+  "${BENCH_MOUNT}/logs" \
+  "${BENCH_MOUNT}/qmd" \
+  "${BENCH_MOUNT}/tasks"
+do
+  [ -e "$path" ] || continue
+  chown -R 1000:1000 "$path" 2>/dev/null || true
+  chmod -R u+rwX,g+rwX "$path" 2>/dev/null || true
+done
+'''
+    proc = subprocess.run(
+        ["docker", "exec", "-e", f"BENCH_MOUNT={mount}", container, "bash", "-lc", script],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if proc.returncode != 0:
+        print(
+            f"[bench] warning: permission repair failed for {container}: "
+            f"{(proc.stderr or proc.stdout).strip()}",
+            file=sys.stderr,
+        )
 
 
 def load_qa(path: Path) -> list[dict]:
@@ -84,7 +128,11 @@ def run_agent(container: str, agent_id: str, qa: dict, run_id: str,
             f"sub-agent's reply verbatim.\n\n"
             f"---\n\n{prompt}"
         )
-    session_key = f"agent:{agent_id}:bench-{run_id}-{qa['qa_id']}"
+    # Use a never-reused key so every QA starts from an empty conversation.
+    # OpenClaw documents --session-key as the explicit session selector; there
+    # is no separate "new session" flag for `openclaw agent`, so freshness comes
+    # from making the key unique per QA attempt.
+    session_key = f"agent:{agent_id}:bench-{run_id}-{qa['qa_id']}-{uuid.uuid4().hex}"
     # Propagate the LLM provider credentials into the container. Without
     # these the embedded openclaw agent cannot reach the model.
     cmd = [
@@ -303,6 +351,7 @@ def main(bench_name: str, agent_id: str | None = None) -> int:
                   "pass_rate": 0.0, "avg_score": 0.0, "results": [],
                   "skipped": "no container"}
     else:
+        repair_container_permissions(container)
         qas = load_qa(qa_path)
         results: list[dict] = []
         for qa in qas:

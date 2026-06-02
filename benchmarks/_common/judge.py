@@ -14,6 +14,7 @@ import os
 import re
 import subprocess
 import sys
+import uuid
 from typing import Any
 
 # --- Rule-based judge --------------------------------------------------------
@@ -91,8 +92,9 @@ def judge_with_agent(qa: dict, answer: str, agent_id: str = "main",
         f"CANDIDATE:\n{(answer or '')[:8000]}\n"
     )
 
+    session_key = f"agent:{agent_id}:bench-judge-{os.getpid()}-{uuid.uuid4().hex}"
     cmd = ["openclaw", "agent", "--agent", agent_id, "--message", prompt, "--json", "--local",
-           "--session-key", f"agent:{agent_id}:bench-judge-{os.getpid()}", "--timeout", str(timeout)]
+           "--session-key", session_key, "--timeout", str(timeout)]
     if model:
         cmd += ["--model", model]
     try:
