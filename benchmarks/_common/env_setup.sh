@@ -139,13 +139,21 @@ log "repo copied into container"
 #     NOT restart the container after patching -- restarting was the root
 #     cause of 13+ CI failures because init.sh re-runs on restart and the
 #     container exits within seconds.
-log "patching models.providers.minimax.apiKey with SecretRef (no restart)"
+log "patching models.providers.minimax.apiKey with SecretRef + sandbox off (no restart)"
 docker exec "${CONTAINER}" python3 -c '
 import json, pathlib
 p = pathlib.Path("/home/node/.openclaw/openclaw.json")
 data = json.loads(p.read_text(encoding="utf-8"))
 prov = data.setdefault("models", {}).setdefault("providers", {}).setdefault("minimax", {})
 prov["apiKey"] = {"source": "env", "provider": "default", "id": "MINIMAX_API_KEY"}
+# Disable sandboxing: the CI container has no Docker daemon (it *is* the
+# Docker host for its own children), so sandbox.mode=all makes the agent
+# fail with "Sandbox mode requires Docker, but the Docker daemon is not
+# available" before it can call the LLM.
+sandbox = data.setdefault("agents", {}).setdefault("defaults", {}).setdefault("sandbox", {})
+if sandbox.get("mode") and sandbox["mode"] != "off":
+    sandbox["mode"] = "off"
+    print("patched agents.defaults.sandbox.mode -> off (no Docker daemon in CI)")
 p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 print("patched models.providers.minimax.apiKey -> SecretRef(MINIMAX_API_KEY)")
 '

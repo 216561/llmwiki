@@ -126,6 +126,8 @@ _NOISE_PREFIXES = (
     "[auth]",
     "[lanes]",
     "[tools]",
+    "[model-fallback",
+    "[model-errors]",
     "[secrets-ref]",
     "[secrets-store]",
     "[secrets-warning]",
@@ -192,6 +194,9 @@ _NOISE_SUBSTRINGS = (
     "Authentication failed",
     "401 Unauthorized",
     "403 Forbidden",
+    "Sandbox mode requires Docker",
+    "Cannot connect to the Docker daemon",
+    "Is the docker daemon running?",
 )
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
