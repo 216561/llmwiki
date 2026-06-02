@@ -170,11 +170,23 @@ PY
   docker compose --project-name "${COMPOSE_PROJECT}" \
     -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" \
     restart openclaw-bench
-  # Re-apply the patch after restart; init.sh wipes openclaw.json.
+  # After restart, init.sh re-ran. Re-derive the container name (the id
+  # is new, but container_name=openclaw-bench is stable) and re-wait for
+  # the gateway ready marker before re-patching.
+  sleep 3
+  for i in $(seq 1 60); do
+    if docker logs --tail 200 openclaw-bench 2>&1 | grep -qE 'http server listening|heartbeat.*started'; then
+      log "gateway ready after restart (poll $i)"
+      break
+    fi
+    sleep 2
+  done
   patch_secret_ref
   log "post-restart SecretRef:"
-  docker exec "${CONTAINER}" python3 -c \
+  docker exec openclaw-bench python3 -c \
     'import json; d=json.load(open("/home/node/.openclaw/openclaw.json")); print(d["models"]["providers"]["minimax"].get("apiKey"))' || true
+  # Re-export the (re-derived) container name for downstream steps.
+  CONTAINER="openclaw-bench"
 else
   log "MINIMAX_API_KEY not set; skipping apiKey patch"
 fi
