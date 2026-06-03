@@ -216,7 +216,7 @@ def run_agent(container: str, agent_id: str, qa: dict, run_id: str,
     # these the embedded openclaw agent cannot reach the model.
     cmd = [
         "docker", "exec", "-i",
-        "-e", "DEEPSEEK_API_KEY", "-e", "DEEPSEEK_BASE_URL",
+        "-e", "MINIMAX_API_KEY", "-e", "MINIMAX_BASE_URL",
         container, "openclaw", "agent",
         "--agent", agent_id, "--message", prompt, "--json", "--local",
         "--session-key", session_key,

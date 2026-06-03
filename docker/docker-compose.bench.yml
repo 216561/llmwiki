@@ -23,7 +23,7 @@ services:
       # Sync flags. Keep model config sync disabled so init.sh never writes
       # plaintext credentials from API_KEY to disk. env_setup.sh patches a
       # SecretRef into openclaw.json instead; benchmark calls pass
-      # DEEPSEEK_API_KEY only to each `docker exec ... openclaw agent --local`
+      # MINIMAX_API_KEY only to each `docker exec ... openclaw agent --local`
       # process.
       SYNC_OPENCLAW_CONFIG: "true"
       SYNC_EXTENSIONS_ON_START: "false"
@@ -34,10 +34,10 @@ services:
       PRIMARY_MODEL: ${PRIMARY_MODEL}
       BASE_URL: ${BASE_URL}
       # Keep API_KEY empty so init.sh does not write plaintext credentials to disk.
-      # The runtime SecretRef uses DEEPSEEK_API_KEY from the container env instead.
+      # The runtime SecretRef uses MINIMAX_API_KEY from the container env instead.
       API_KEY: ""
-      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
-      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL}
+      MINIMAX_API_KEY: ${MINIMAX_API_KEY}
+      MINIMAX_BASE_URL: ${MINIMAX_BASE_URL}
       API_PROTOCOL: ${API_PROTOCOL}
       CONTEXT_WINDOW: ${CONTEXT_WINDOW}
       MAX_TOKENS: ${MAX_TOKENS}
