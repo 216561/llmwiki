@@ -78,6 +78,7 @@ benchmarks/**/results/
 benchmarks/**/output/
 benchmarks/**/bench-report.json
 bench-results/
+bench-debug/
 .bench-runtime/
 .bench-runtime/.env.bench
 **/__pycache__/

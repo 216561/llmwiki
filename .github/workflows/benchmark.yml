@@ -3,12 +3,23 @@ name: Benchmark
 on:
   # Run on every PR push (open / reopen / new commit / draft -> ready).
   # `synchronize` fires for every new commit pushed to the PR branch.
+  #
+  # DEBUG mode policy: BENCH_DEBUG=1 is set ONLY on pull_request runs. Direct
+  # pushes to main and the post-merge rerun use the normal (non-DEBUG) path.
+  # workflow_dispatch also defaults to normal mode; pass the `debug` input
+  # explicitly to force DEBUG on a manual main-branch run.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      debug:
+        description: "Enable BENCH_DEBUG=1 (raw artifacts per QA, PR-style verbose output)"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -28,6 +39,10 @@ jobs:
       BENCH_TARGETS: "idea-generate paper-review paper-review-pipeline paper-ingest idea-generation autoresearch"
       # Pin the upstream image. Override via repo variable OPENCLAW_IMAGE.
       OPENCLAW_IMAGE_DEFAULT: "acautomata/openclaw-docker-cn-im:latest"
+      # BENCH_DEBUG=1 only on PR runs. Direct pushes to main and the
+      # post-merge rerun are normal (no raw artifact dump). For a manual
+      # main-branch debug run, dispatch the workflow with debug=true.
+      BENCH_DEBUG: ${{ github.event_name == 'pull_request' && '1' || (github.event_name == 'workflow_dispatch' && inputs.debug && '1' || '') }}
 
     steps:
       - name: "Checkout"
@@ -37,10 +52,10 @@ jobs:
 
       - name: "Verify required secrets"
         env:
-          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         run: |
-          if [ -z "${MINIMAX_API_KEY:-}" ]; then
-            echo "::error::MINIMAX_API_KEY is not configured. Add it to repo Settings -> Secrets and variables -> Actions before running benchmarks." >&2
+          if [ -z "${DEEPSEEK_API_KEY:-}" ]; then
+            echo "::error::DEEPSEEK_API_KEY is not configured. Add it to repo Settings -> Secrets and variables -> Actions before running benchmarks." >&2
             exit 1
           fi
 
@@ -54,8 +69,8 @@ jobs:
 
       - name: "Render docker env file from secrets"
         env:
-          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
-          MINIMAX_BASE_URL: ${{ secrets.MINIMAX_BASE_URL }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          DEEPSEEK_BASE_URL: ${{ secrets.DEEPSEEK_BASE_URL }}
         run: |
           set -euo pipefail
           mkdir -p .bench-runtime
@@ -73,9 +88,9 @@ jobs:
               "SYNC_OPENCLAW_CONFIG=false",
               "SYNC_EXTENSIONS_ON_START=false",
               "SYNC_MODEL_CONFIG=false",
-              "MODEL_ID=minimax/MiniMax-M2.7",
-              "PRIMARY_MODEL=minimax/MiniMax-M2.7",
-              "BASE_URL=" + (os.environ.get("MINIMAX_BASE_URL") or "https://api.minimaxi.com"),
+              "MODEL_ID=deepseek/deepseek-v4-flash",
+              "PRIMARY_MODEL=deepseek/deepseek-v4-flash",
+              "BASE_URL=" + (os.environ.get("DEEPSEEK_BASE_URL") or "https://api.deepseek.com"),
               "API_PROTOCOL=anthropic",
               "CONTEXT_WINDOW=200000",
               "MAX_TOKENS=8192",
@@ -92,8 +107,8 @@ jobs:
 
       - name: "Unified env (pull image + docker compose up)"
         env:
-          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
-          MINIMAX_BASE_URL: ${{ secrets.MINIMAX_BASE_URL }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          DEEPSEEK_BASE_URL: ${{ secrets.DEEPSEEK_BASE_URL }}
         run: |
           bash benchmarks/_common/env_setup.sh
 
@@ -117,8 +132,8 @@ jobs:
           BENCH_CONTAINER: ${{ env.BENCH_CONTAINER }}
           BENCH_MOUNT: ${{ env.BENCH_MOUNT }}
           BENCH_OPENCLAW: openclaw
-          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
-          MINIMAX_BASE_URL: ${{ secrets.MINIMAX_BASE_URL }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          DEEPSEEK_BASE_URL: ${{ secrets.DEEPSEEK_BASE_URL }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BENCH_REPO: ${{ github.repository }}
           BENCH_PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -174,6 +189,14 @@ jobs:
           path: |
             bench-results/
             benchmarks/*/bench-report.json
+          if-no-files-found: warn
+
+      - name: "Upload bench-debug artifacts (PR runs only)"
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-debug-${{ github.run_id }}
+          path: bench-debug/
           if-no-files-found: warn
 
       - name: "Tear down compose stack"

@@ -39,6 +39,62 @@ else:
 ROOT = Path(__file__).resolve().parent.parent.parent
 
 
+# ---------------------------------------------------------------------------
+# Debug-mode helper
+# ---------------------------------------------------------------------------
+#
+# BENCH_DEBUG=1 makes run_bench.py dump the raw, unredacted artifacts from
+# every `openclaw agent` call to a per-benchmark debug directory (default
+# `bench-debug/<bench>/<qa_id>/`) so the CI logs and uploaded artifacts
+# contain the *raw* full stdout, the full stderr, the wrapped prompt we
+# actually sent, the extracted agent text, and the judge's input/output.
+# Without this we only print a 200-char head of the cleaned text, which
+# makes it impossible to diagnose failures caused by JSON parse errors,
+# sub-agent routing bugs, sandbox errors, etc.
+
+DEBUG = os.environ.get("BENCH_DEBUG", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _debug_dir(bench: str, qa_id: str | None = None) -> Path | None:
+    if not DEBUG:
+        return None
+    base = Path(os.environ.get("BENCH_DEBUG_DIR", ROOT / "bench-debug"))
+    d = base / bench
+    if qa_id:
+        d = d / qa_id
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _debug_write(path: Path, content: str | bytes) -> None:
+    """Write a debug artifact. content may be str (utf-8) or bytes."""
+    try:
+        if isinstance(content, bytes):
+            path.write_bytes(content)
+        else:
+            path.write_text(content, encoding="utf-8")
+    except OSError as e:
+        print(f"[debug] failed to write {path}: {e}", file=sys.stderr)
+
+
+def _debug_echo(label: str, value: object) -> None:
+    """Echo a short, structured marker to stderr so DEBUG shows up inline in CI logs."""
+    if not DEBUG:
+        return
+    if isinstance(value, str) and len(value) > 200:
+        value = value[:200] + f"... <truncated, {len(value)} chars total>"
+    print(f"[DEBUG] {label}: {value!r}", file=sys.stderr)
+
+
+def _debug_banner(bench: str) -> None:
+    """Print a one-line startup banner so DEBUG mode is visible from the first log line."""
+    if not DEBUG:
+        return
+    artifacts = Path(os.environ.get("BENCH_DEBUG_DIR", ROOT / "bench-debug")) / bench
+    print(f"[DEBUG] BENCH_DEBUG=1 — full raw artifacts per QA will be written to "
+          f"{artifacts.resolve()}", file=sys.stderr)
+
+
 def repair_container_permissions(container: str) -> None:
     """Make benchmark-created runtime files writable by OpenClaw's node user.
 
@@ -99,16 +155,18 @@ def load_qa(path: Path) -> list[dict]:
 
 
 def run_agent(container: str, agent_id: str, qa: dict, run_id: str,
-              model: str | None) -> tuple[str, str]:
+              model: str | None, debug_dir: Path | None = None) -> tuple[str, str, dict]:
     """Always invokes `agent_id` (which the CI contract pins to `main`).
     If the QA carries a `target_agent` field, the prompt is wrapped so main
     delegates to that sub-agent via sessions_spawn and returns the sub-agent's
     final answer.
 
-    Returns (cleaned_agent_text, session_key). With --json, openclaw writes
-    the structured reply to stdout and all diagnostics to stderr, so we
-    capture them separately and only look at the JSON payload[].text fields
-    for the actual agent answer.
+    Returns (cleaned_agent_text, session_key, raw_artifacts). The third
+    tuple element is a dict with the unredacted raw stdout / stderr / prompt
+    / cmd, useful for BENCH_DEBUG=1 dumps and for future re-runs.
+    With --json, openclaw writes the structured reply to stdout and all
+    diagnostics to stderr, so we capture them separately and only look at
+    the JSON payload[].text fields for the actual agent answer.
     """
     target = qa.get("target_agent")
     prompt = qa["question"]
@@ -156,7 +214,7 @@ def run_agent(container: str, agent_id: str, qa: dict, run_id: str,
     # these the embedded openclaw agent cannot reach the model.
     cmd = [
         "docker", "exec", "-i",
-        "-e", "MINIMAX_API_KEY", "-e", "MINIMAX_BASE_URL",
+        "-e", "DEEPSEEK_API_KEY", "-e", "DEEPSEEK_BASE_URL",
         container, "openclaw", "agent",
         "--agent", agent_id, "--message", prompt, "--json", "--local",
         "--session-key", session_key,
@@ -164,16 +222,51 @@ def run_agent(container: str, agent_id: str, qa: dict, run_id: str,
     ]
     if model:
         cmd += ["--model", model]
+    timed_out = False
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True,
                               timeout=qa.get("timeout_seconds", 1800) + 60)
-    except subprocess.TimeoutExpired:
-        return ("", session_key)
+        stdout = proc.stdout or ""
+        stderr = proc.stderr or ""
+        returncode = proc.returncode
+    except subprocess.TimeoutExpired as e:
+        # Preserve whatever partial output we got, but mark the failure.
+        stdout = e.stdout.decode("utf-8", "replace") if isinstance(e.stdout, (bytes, bytearray)) else (e.stdout or "")
+        stderr = e.stderr.decode("utf-8", "replace") if isinstance(e.stderr, (bytes, bytearray)) else (e.stderr or "")
+        returncode = -1
+        timed_out = True
     # Per docs.openclaw.ai/tools/agent-send: with --json, the structured
     # payload (including payloads[].text = the agent's reply) is on stdout;
     # diagnostics, context-engine warnings, and lane errors all go to stderr.
     # We deliberately keep them separate and only return the agent text.
-    return (_extract_agent_text(proc.stdout or "", proc.stderr or ""), session_key)
+    agent_text = _extract_agent_text(stdout, stderr)
+    raw = {
+        "cmd": cmd,
+        "prompt": prompt,
+        "stdout": stdout,
+        "stderr": stderr,
+        "returncode": returncode,
+        "timed_out": timed_out,
+        "session_key": session_key,
+        "agent_text": agent_text,
+    }
+    if debug_dir is not None:
+        _debug_write(debug_dir / "00_prompt.txt", prompt)
+        _debug_write(debug_dir / "01_cmd.json", json.dumps(cmd, ensure_ascii=False, indent=2))
+        _debug_write(debug_dir / "02_stdout.txt", stdout)
+        _debug_write(debug_dir / "03_stderr.txt", stderr)
+        _debug_write(debug_dir / "04_agent_text.txt", agent_text)
+        meta = {
+            "qa_id": qa.get("qa_id"),
+            "session_key": session_key,
+            "returncode": returncode,
+            "timed_out": timed_out,
+            "stdout_bytes": len(stdout.encode("utf-8")),
+            "stderr_bytes": len(stderr.encode("utf-8")),
+            "agent_text_chars": len(agent_text),
+        }
+        _debug_write(debug_dir / "05_meta.json", json.dumps(meta, ensure_ascii=False, indent=2))
+    return (agent_text, session_key, raw)
 
 
 # Lines we know are diagnostic noise from openclaw, not the agent's answer.
@@ -374,9 +467,13 @@ def main(bench_name: str, agent_id: str | None = None) -> int:
         repair_container_permissions(container)
         qas = load_qa(qa_path)
         results: list[dict] = []
+        _debug_banner(bench_name)
         for qa in qas:
+            qa_debug_dir = _debug_dir(bench_name, qa["qa_id"])
+            _debug_echo("qa_start", f"id={qa['qa_id']} target={qa.get('target_agent')} judge={qa.get('judge')}")
             t0 = time.time()
-            answer, session_key = run_agent(container, agent_id, qa, run_id, model)
+            answer, session_key, raw = run_agent(container, agent_id, qa, run_id, model,
+                                                  debug_dir=qa_debug_dir)
             elapsed = time.time() - t0
             mode = qa.get("judge", "rules")
             # LLM judge directly invokes the dedicated reviewer agent. The
@@ -385,14 +482,25 @@ def main(bench_name: str, agent_id: str | None = None) -> int:
             verdict = (judge_with_agent(qa, answer, agent_id="reviewer", model=model,
                                         container=container)
                        if mode == "agent" else judge_with_rules(answer, qa))
-            # Debug: surface the first 200 chars of the agent's reply so
+            # Dump judge artifacts when DEBUG is on.
+            if qa_debug_dir is not None:
+                _debug_write(qa_debug_dir / "06_verdict.json", json.dumps(verdict, ensure_ascii=False, indent=2))
+                _debug_write(qa_debug_dir / "07_answer_full.txt", answer or "")
+                _debug_write(qa_debug_dir / "08_qa.json", json.dumps(qa, ensure_ascii=False, indent=2))
+            _debug_echo("qa_done", f"id={qa['qa_id']} score={verdict.get('score', 0):.3f} "
+                        f"pass={verdict.get('pass', False)} elapsed={elapsed:.1f}s "
+                        f"returncode={raw.get('returncode')} timed_out={raw.get('timed_out')} "
+                        f"stdout_bytes={len(raw.get('stdout', ''))} "
+                        f"stderr_bytes={len(raw.get('stderr', ''))} "
+                        f"agent_text_chars={len(answer or '')}")
+            # Surface the first 200 chars of the agent's reply so
             # zero-score failures are easy to diagnose from CI logs.
             head = (answer or "").replace("\n", "\\n")[:200]
             print(f"  [{qa['qa_id']}] score={verdict.get('score', 0):.3f} "
                   f"pass={verdict.get('pass', False)} "
                   f"len(answer)={len(answer or '')} head={head!r}",
                   file=sys.stderr)
-            results.append({
+            result_entry = {
                 "qa_id": qa["qa_id"], "task_type": qa.get("task_type"),
                 "target_agent": qa.get("target_agent"),
                 "weight": qa.get("weight", 1.0),
@@ -400,7 +508,16 @@ def main(bench_name: str, agent_id: str | None = None) -> int:
                 "rationale": verdict.get("rationale", ""),
                 "elapsed_seconds": round(elapsed, 1),
                 "session_key": session_key, "raw_output": answer[:2000],
-            })
+            }
+            if DEBUG:
+                result_entry["debug"] = {
+                    "returncode": raw.get("returncode"),
+                    "timed_out": raw.get("timed_out"),
+                    "stdout_len": len(raw.get("stdout", "")),
+                    "stderr_len": len(raw.get("stderr", "")),
+                    "agent_text_len": len(answer or ""),
+                }
+            results.append(result_entry)
         weight_total = sum(r["weight"] for r in results) or 1.0
         weighted = sum(r["score"] * r["weight"] for r in results) / weight_total
         passed = sum(1 for r in results if r["pass"])
@@ -410,12 +527,19 @@ def main(bench_name: str, agent_id: str | None = None) -> int:
             "pass_rate": passed / len(results) if results else 0.0,
             "avg_score": round(weighted, 4), "results": results,
         }
+    if DEBUG:
+        report["debug"] = {
+            "mode": "BENCH_DEBUG=1",
+            "artifacts_dir": str((Path(os.environ.get("BENCH_DEBUG_DIR", ROOT / "bench-debug")) / bench_name).resolve()),
+        }
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     results_dir = Path(os.environ.get("BENCH_RESULTS_DIR", ROOT / "bench-results"))
     results_dir.mkdir(parents=True, exist_ok=True)
     (results_dir / f"{bench_name}.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"[{bench_name}] {report['passed']}/{report['total']} passed, avg_score={report['avg_score']:.3f}")
+    if DEBUG:
+        print(f"[DEBUG] {bench_name} artifacts: {report['debug']['artifacts_dir']}", file=sys.stderr)
     return 0
 
 
