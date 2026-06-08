@@ -13,12 +13,13 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 QA_SRC="${HERE}/qa.jsonl"
 MATERIALS_SRC="${HERE}/materials"
 [[ -f "${QA_SRC}" ]] || { echo "missing ${QA_SRC} (run build_qa.py first)" >&2; exit 1; }
+rm -f "${HERE}/.wiki-import-failed" "${HERE}/.wiki-import-stderr.log"
 
 log() { printf '\n[paper-review.env] %s\n' "$*"; }
 
 # Bring up a fresh openclaw-bench container for this benchmark so fixtures
 # and runtime state from a previous benchmark cannot leak in.
-if [[ -f "${BENCH_ENV_FILE}" ]]; then
+if [[ -n "${BENCH_ENV_FILE:-}" && -f "${BENCH_ENV_FILE}" ]]; then
   # shellcheck disable=SC1090
   . "${BENCH_ENV_FILE}"
   bench_force_recreate
@@ -31,17 +32,25 @@ docker cp "${QA_SRC}" "${BENCH_CONTAINER}:${BENCH_MOUNT}/workspace-paper-review/
 
 if [[ -d "${MATERIALS_SRC}" ]]; then
   log "staging materials (${MATERIALS_SRC})"
-  docker exec "${BENCH_CONTAINER}" mkdir -p \
-    "${BENCH_MOUNT}/workspace-paper-review/bench-fixtures/materials"
-  tar -C "${MATERIALS_SRC}" -cf - . | \
-    docker cp - "${CONTAINER:-${BENCH_CONTAINER}}:${BENCH_MOUNT}/workspace-paper-review/bench-fixtures/materials/" \
-    || docker exec "${BENCH_CONTAINER}" bash -lc \
-        "rm -rf ${BENCH_MOUNT}/workspace-paper-review/bench-fixtures/materials && mkdir -p ${BENCH_MOUNT}/workspace-paper-review/bench-fixtures/materials"
+  docker exec "${BENCH_CONTAINER}" bash -lc \
+    "rm -rf '${BENCH_MOUNT}/workspace-paper-review/bench-fixtures/materials' && mkdir -p '${BENCH_MOUNT}/workspace-paper-review/bench-fixtures/materials'"
   for f in "${MATERIALS_SRC}"/*; do
     [[ -f "$f" ]] || continue
     docker cp "$f" "${BENCH_CONTAINER}:${BENCH_MOUNT}/workspace-paper-review/bench-fixtures/materials/$(basename "$f")"
   done
 fi
+
+# OpenClaw tools resolve relative paths from ${BENCH_MOUNT}/workspace. The QA
+# prompts intentionally mention repo-relative material paths such as
+# benchmarks/paper-review/materials/wiki/react-wiki.md, so expose the copied
+# benchmark tree from that workspace root.
+log "linking repo benchmarks into OpenClaw workspaces"
+docker exec "${BENCH_CONTAINER}" bash -lc \
+  "for ws in workspace workspace-paper-review; do
+     mkdir -p '${BENCH_MOUNT}/\${ws}'
+     rm -rf '${BENCH_MOUNT}/\${ws}/benchmarks'
+     ln -s '${BENCH_MOUNT}/benchmarks' '${BENCH_MOUNT}/\${ws}/benchmarks'
+   done"
 
 log "ensuring output dir"
 docker exec "${BENCH_CONTAINER}" mkdir -p \
@@ -51,11 +60,14 @@ docker exec "${BENCH_CONTAINER}" mkdir -p \
 # Wiki import: call main agent to import the MD materials into the wiki.
 # The agent must confirm every staged file was imported; otherwise we write a
 # failure marker that metrics.py picks up and the benchmark scores 0.
+#
+# NOTE: Wiki import is NOT part of the benchmark evaluation flow. Each QA
+# reads materials from staged fixture paths or inline upstream summaries in
+# the prompt. The wiki ingest/read path belongs to integration benchmarks, not
+# this paper-review single-agent skill benchmark. The disabled block below is
+# kept only as a historical/manual comparison helper.
 # ---------------------------------------------------------------------------
-
-# Clean stale marker from a previous run
-rm -f "${HERE}/.wiki-import-failed"
-rm -f "${HERE}/.wiki-import-stderr.log"
+: <<'WIKI_IMPORT_DISABLED'
 
 log "staging MD materials into autoresearch inbox"
 WIKI_INBOX="${BENCH_MOUNT}/workspace-autoresearch/raw/inbox/bench-${BENCH_RUN_ID}"
@@ -90,7 +102,7 @@ IMPORT_PROMPT="请将以下 ${#STAGED_NAMES[@]} 份论文材料导入 wiki。
 材料位于 workspace-autoresearch/raw/inbox/bench-${BENCH_RUN_ID}/ 目录下：
 ${STAGED_BULLETS}
 
-请使用 autoresearch 子 agent 的 ingest 流程将这些材料逐个导入 wiki。
+注意：你必须自己直接读取每个文件内容并使用 wiki 工具写入，不得委托给子 agent，不得使用 sessions_spawn。逐个文件处理，每完成一个立即汇报文件名和「导入成功」。违反此规则将导致整体失败。
 
 完成后请在回复中按顺序逐个文件汇报导入状态：
 - 每个文件成功后必须包含其原始文件名（如 ${STAGED_NAMES[0]}），并在该文件行旁边写出「导入成功」
@@ -102,7 +114,7 @@ ${STAGED_BULLETS}
 IMPORT_RAW=""
 INVOCATION_OK=0
 if IMPORT_RAW=$(docker exec -i \
-    -e "MINIMAX_API_KEY" -e "MINIMAX_BASE_URL" \
+    -e "MINIMAX_API_KEY" \
     "${BENCH_CONTAINER}" openclaw agent \
     --agent main \
     --message "${IMPORT_PROMPT}" \
@@ -113,31 +125,48 @@ if IMPORT_RAW=$(docker exec -i \
   INVOCATION_OK=1
 fi
 
-# Extract agent text from JSON payloads (mirrors _extract_agent_text in
-# run_bench.py: prefers top-level payloads[], then result.payloads[]).
-IMPORT_TEXT=$(printf '%s' "${IMPORT_RAW}" | python3 -c "
-import json, sys
-try:
-    data = json.load(sys.stdin)
-    texts = []
-    if isinstance(data, dict):
-        payloads = data.get('payloads')
-        if isinstance(payloads, list) and payloads:
-            joined = '\n'.join(p.get('text','') for p in payloads if isinstance(p, dict) and p.get('text'))
-            if joined.strip():
-                print(joined)
-                sys.exit(0)
-        result = data.get('result')
-        if isinstance(result, dict):
-            payloads = result.get('payloads')
-            if isinstance(payloads, list) and payloads:
-                joined = '\n'.join(p.get('text','') for p in payloads if isinstance(p, dict) and p.get('text'))
-                if joined.strip():
-                    print(joined)
-                    sys.exit(0)
-except Exception:
-    pass
-" 2>/dev/null) || IMPORT_TEXT=""
+# Extract agent text from JSON payloads. First try stdout, then stderr
+# (OpenClaw may route --json output to either stream).
+_IMPORT_JSON_EXTRACT=$(python3 -c "
+import json, sys, re
+def extract(text):
+    '''Find and parse JSON in text (may have diagnostic prefixes).'''
+    # Try direct parse first
+    try:
+        data = json.loads(text)
+    except Exception:
+        data = None
+    if not isinstance(data, dict):
+        # Scan for JSON object containing payloads (raw or escaped quotes)
+        for m in re.finditer(r'\{[^{]*[\"\\\\]?payloads[\"\\\\]?', text):
+            i = m.start()
+            depth = 0
+            for j in range(i, len(text)):
+                if text[j] == '{': depth += 1
+                elif text[j] == '}': depth -= 1
+                if depth == 0:
+                    try:
+                        data = json.loads(text[i:j+1])
+                    except Exception:
+                        pass
+                    break
+            if isinstance(data, dict):
+                break
+    if not isinstance(data, dict):
+        return ''
+    payloads = data.get('payloads') or data.get('result', {}).get('payloads') or []
+    return '\n'.join(p.get('text','') for p in payloads if isinstance(p, dict) and p.get('text'))
+# Try stdout first, then stderr log
+result = extract(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1] else ''
+if not result:
+    try:
+        with open(sys.argv[2], 'r') as f:
+            result = extract(f.read())
+    except Exception:
+        pass
+print(result)
+" "${IMPORT_RAW:-}" "${HERE}/.wiki-import-stderr.log" 2>/dev/null) || true
+IMPORT_TEXT="${_IMPORT_JSON_EXTRACT}"
 
 if [[ ${INVOCATION_OK} -ne 1 ]]; then
   log "FATAL: docker exec failed; see ${HERE}/.wiki-import-stderr.log"
@@ -181,5 +210,7 @@ else
     log "wiki import succeeded (${#STAGED_NAMES[@]} files)"
   fi
 fi
+
+WIKI_IMPORT_DISABLED
 
 log "env ready"
