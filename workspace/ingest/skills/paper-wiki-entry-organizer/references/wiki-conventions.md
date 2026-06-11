@@ -15,7 +15,7 @@ Wiki 的命名、索引、日志、链接和维护规则。
 
 ## Index 规则
 
-wiki/index.md 是内容导向的目录，人类和 agent 都应可读。
+wiki index 页面是内容导向的目录，人类和 agent 都应可读。
 
 - 按领域优先组织，再按页面类型
 - 对研究领域，展示 papers、methods、datasets、tasks、metrics、concepts、topics、comparisons、analyses
@@ -31,7 +31,7 @@ wiki/index.md 是内容导向的目录，人类和 agent 都应可读。
 
 ## Log 规则
 
-wiki/log.md 是按时间排列的追加式记录。
+wiki log 页面是按时间排列的追加式记录。
 
 - 每条以 `## [YYYY-MM-DD] action | title` 开头
 - 动作类型：setup / ingest / query / analysis / compare / lint / schema / organize
@@ -52,7 +52,7 @@ Log 是追加式的，不要重写历史条目（除非用户要求）。
 ## 链接规则
 
 - 使用相对 markdown 链接，不使用绝对本地文件路径
-- 每个新页面至少从一个现有页面和 wiki/index.md 链接
+- 每个新页面至少从一个现有页面和 wiki index 页面链接
 - 当论文为已有的方法、数据集、任务、指标、概念、主题或比较页面提供信息时，更新该页面
 - 从可复用研究对象页面链接回支撑它们的论文页面
 - 当页面引用多个相关页面时，添加 Connections 章节
@@ -78,7 +78,7 @@ Log 是追加式的，不要重写历史条目（除非用户要求）。
 - 页面被取代时标记 superseded 并指向新的规范页面
 - 页面重要但连接薄弱时，从相关页面或 index 添加入站链接
 - 页面过期时，在下一个相关的 ingest 或 query 时刷新
-- 页面放错位置时，优先在 wiki/domains/ 内移动而非复制
+- 页面放错位置时，优先在 domains 子树内用 wiki 工具移动而非复制
 - 迁移期间保留旧的 sources/ 链接，直到对应的 papers/ 页面存在且入站链接已更新
 
 ## 矛盾与不确定性

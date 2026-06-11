@@ -24,7 +24,7 @@ Generate research ideas from existing wiki literature.
 
 ### Step 0: Pre-flight
 
-Main agent reads `wiki/index.md` and relevant `wiki/domains/` pages. If insufficient, browser-searches arXiv/Scholar. Collect paths, summaries, gaps into a context packet.
+Main agent uses `wiki_get` to read the wiki index and relevant domain pages. If insufficient, browser-searches arXiv/Scholar. Collect page IDs, summaries, gaps into a context packet.
 
 ### Step 1: Spawn curate (timeout: 900s)
 

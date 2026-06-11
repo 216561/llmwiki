@@ -14,4 +14,4 @@
 - `memory/` — 过程性记录
 - `MEMORY.md` — 长期经验
 
-wiki 内容通过 wiki 工具在 `~/.openclaw/wiki/main/` 读写,不在 workspace 内复制。
+wiki 内容通过 wiki 工具读写,不在 workspace 内复制。

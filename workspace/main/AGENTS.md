@@ -109,8 +109,8 @@ judge 审查                                             design
 
 ### 第一步：查本地 Wiki
 
-1. **读索引** — 读取 `/workspace/shared/memory-wiki/index.md`（非沙箱环境可用 `~/.openclaw/wiki/main/index.md`），搜索与用户问题相关的论文、方法、领域关键词。
-2. **定位相关页面** — 根据索引中的链接，读取 `/workspace/shared/memory-wiki/domains/` 下的相关论文页、方法页、比较页等。
+1. **读索引** — 使用 `wiki_get` 读取 wiki 索引页，搜索与用户问题相关的论文、方法、领域关键词。
+2. **定位相关页面** — 根据索引中的链接，使用 `wiki_get` 读取相关论文页、方法页、比较页等。
 3. **提取关键信息** — 从 wiki 页面中提取与用户问题直接相关的内容（实验数据、方法描述、已有分析结论等）。
 
 ### 第二步：Wiki 不足时使用浏览器

@@ -17,7 +17,7 @@ Add a paper (PDF or URL) to the research wiki. Produces a verified, linted wiki 
 
 ### Pre-check (main agent)
 
-1. Search wiki index (`/workspace/shared/memory-wiki/index.md`) for existing entry. Skip if already present unless user requests re-ingest.
+1. Use `wiki_search` to check for existing entry. Skip if already present unless user requests re-ingest.
 2. Validate user provided a PDF path or URL. If neither, ask.
 3. Record paper metadata for downstream context.
 

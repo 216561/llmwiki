@@ -86,7 +86,7 @@ sessions_spawn(
   
   原始用户需求: <user's original request>
   Main 分析结论: <main's analysis>
-  已知上下文: <wiki paths, existing files, etc.>
+  已知上下文: <wiki page references, existing files, etc.>
   上游产出: <上游 worker 的输出文件路径（如有依赖）>
   
   产出要求: <具体产出文件和格式要求>

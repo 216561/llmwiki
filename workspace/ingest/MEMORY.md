@@ -15,6 +15,6 @@ Paper PDF ingestion → wiki page creation
 
 ## 维护规则
 
-- 每次操作后更新 wiki/log.md（追加式）
-- 每次新增或更改持久页面后更新 wiki/index.md
+- 每次操作后通过 `wiki_apply` 追加 wiki 日志
+- 每次新增或更改持久页面后通过 `wiki_apply` 更新 wiki 索引
 - 不确定时标"待验证"

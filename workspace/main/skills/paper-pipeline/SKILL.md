@@ -25,7 +25,7 @@ Deep paper analysis and validation. User provides a paper (PDF/URL) and receives
 
 ### Pre-pipeline
 
-Read wiki index (`workspace/shared/memory-wiki/index.md`). If paper entry exists, pass path to all stages; otherwise ingest (S1) will create it.
+Use `wiki_search` to check if paper entry exists. If found, note the page ID for downstream stages; otherwise ingest (S1) will create it.
 
 ### Per-stage spawn pattern
 
@@ -37,19 +37,19 @@ Each stage follows the same pattern: spawn, wait, verify output, proceed.
 - Gate: Wiki page >= 100 lines, at least one numeric result
 
 **S2 — extract** | Timeout: 1800s (30 min)
-- `sessions_spawn(agentId: "extract", task: "对以下论文执行实验深度提取（S2）。标题：{title}。Wiki路径：{wiki}。输出到 outputs/{slug}/{slug}-experiment.md。", mode: "run", runTimeoutSeconds: 1800)`
+- `sessions_spawn(agentId: "extract", task: "对以下论文执行实验深度提取（S2）。标题：{title}。Wiki页面：{page_id}（使用 wiki_get 读取）。输出到 outputs/{slug}/{slug}-experiment.md。", mode: "run", runTimeoutSeconds: 1800)`
 - Input: Wiki path from S1, PDF as fallback
 - Output: `{slug}-experiment.md`
 - Gate: File exists with all 11 sections per extract skill template
 
 **S3 — critic** | Timeout: 1200s (20 min)
-- `sessions_spawn(agentId: "critic", task: "对以下论文执行审稿式问题分析（S3）。标题：{title}。Wiki路径：{wiki}。S2产出：{S2 output path}。输出到 outputs/{slug}/{slug}-problem.md。", mode: "run", runTimeoutSeconds: 1200)`
+- `sessions_spawn(agentId: "critic", task: "对以下论文执行审稿式问题分析（S3）。标题：{title}。Wiki页面：{page_id}（使用 wiki_get 读取）。S2产出：{S2 output path}。输出到 outputs/{slug}/{slug}-problem.md。", mode: "run", runTimeoutSeconds: 1200)`
 - Input: Wiki path, S2 experiment doc
 - Output: `{slug}-problem.md`
 - Gate: >= 1 concrete problem with evidence traceability
 
 **S4 — design** | Timeout: 1200s (20 min)
-- `sessions_spawn(agentId: "design", task: "对以下论文执行验证实验设计（S4）。标题：{title}。Wiki路径：{wiki}。S3产出：{S3 output path}。输出到 outputs/{slug}/{slug}-validation.md。", mode: "run", runTimeoutSeconds: 1200)`
+- `sessions_spawn(agentId: "design", task: "对以下论文执行验证实验设计（S4）。标题：{title}。Wiki页面：{page_id}（使用 wiki_get 读取）。S3产出：{S3 output path}。输出到 outputs/{slug}/{slug}-validation.md。", mode: "run", runTimeoutSeconds: 1200)`
 - Input: Wiki path, S3 problem doc
 - Output: `{slug}-validation.md`
 - Gate: Each experiment maps to an S3 problem with expected results

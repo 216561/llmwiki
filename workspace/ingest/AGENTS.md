@@ -42,15 +42,15 @@
 4. 失败时：补充缺失部分，最多 1 次重试
 
 ### 步骤 4：Update Index（更新索引）
-1. 更新 wiki/index.md 和 wiki/log.md
-2. **Verify**：index 条目链接正确，log 条目为追加式
+1. 通过 `wiki_apply` 更新 wiki 索引和日志
+2. **Verify**：用 `wiki_get` 确认索引条目链接正确，日志条目为追加式
 3. 失败时：停止并报告
 
 ### 最低可接受产出
 - 一个 raw source 已捕获
 - 一份全文已提取
-- 一个 paper page 已创建（>=100 行，有 evidence_level，Results 有具体数字）
-- wiki/index.md 和 wiki/log.md 已更新
+- 一个 paper page 已通过 wiki 工具创建（>=100 行，有 evidence_level，Results 有具体数字）
+- wiki 索引和日志已通过 wiki 工具更新
 
 ## 我不做的事
 

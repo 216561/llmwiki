@@ -16,8 +16,8 @@ sessions_spawn(
   agentId: "extract",
   task: """对以下论文执行实验深度提取（S2）。
   - 标题：{论文标题}
-  - Wiki路径：{wiki 中的路径}
-  - PDF路径：{Wiki 缺失时必填}
+  - Wiki页面：{wiki 中的页面标识（使用 wiki_get 读取）}
+  - PDF路径：{Wiki 页面缺失时必填}
   使用 paper-experiment-deep-extractor skill，输出保存到
   outputs/{论文简称}/{论文简称}-experiment.md。""",
   mode: "run",

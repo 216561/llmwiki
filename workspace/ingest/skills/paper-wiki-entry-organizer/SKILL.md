@@ -35,10 +35,12 @@ After successful ingestion, the following should exist:
 ```text
 raw/sources/YYYY-MM-DD-short-title.pdf
 raw/sources/YYYY-MM-DD-short-title.txt   # extracted full text
-wiki/domains/<domain>/papers/<slug>.md    # structured paper page
-wiki/index.md                              # updated
-wiki/log.md                                # append entry
 ```
+
+Wiki side effects (via `wiki_apply` / `wiki_get` tools, not filesystem writes):
+- A structured paper page created under the target domain (slug: `<slug>`)
+- wiki index updated (add paper entry under domain)
+- wiki log appended (format: `## [YYYY-MM-DD] ingest | Paper Title`)
 
 The paper page must include:
 - All frontmatter fields (title, type, domain, status, created, updated, tags, source_pages, raw_sources, related_pages)
@@ -58,23 +60,23 @@ The paper page must include:
 3. On failure: try alternative extraction once, then report and stop
 
 ### Step 3: Create Paper Page
-1. Create the paper page at `wiki/domains/<domain>/papers/<slug>.md` using the 11-section template
+1. Use `wiki_apply` to create the paper page under the target domain with the 11-section template (see references/page-templates.md)
 2. Fill all frontmatter fields; set `evidence_level` based on coverage
-3. **Verify**: page >=100 lines, has evidence_level, Results has concrete numbers
+3. **Verify**: page >=100 lines, has evidence_level, Results has concrete numbers (use `wiki_get` to re-read)
 4. On failure: re-read source and fill missing parts, max 1 retry
 
 ### Step 4: Update Index
-1. Update `wiki/index.md` (add paper page entry under domain)
-2. Append entry to `wiki/log.md` with format `## [YYYY-MM-DD] ingest | Paper Title`
-3. **Verify**: index links correct, log is append-only
+1. Use `wiki_apply` to update the wiki index (add paper page entry under domain)
+2. Use `wiki_apply` to append a log entry with format `## [YYYY-MM-DD] ingest | Paper Title`
+3. **Verify**: use `wiki_get` to confirm index links correct, log is append-only
 4. On failure: stop and report
 
 ## Minimum Acceptable Output
 
 - One raw source captured
 - One full-text extraction completed
-- One paper page created (>=100 lines, has evidence_level, Results has concrete numbers)
-- wiki/index.md and wiki/log.md updated
+- One paper page created via wiki tools (>=100 lines, has evidence_level, Results has concrete numbers)
+- Wiki index and log updated via wiki tools
 
 ## Quality Rules
 

@@ -48,7 +48,7 @@
 
 - `memory/YYYY-MM-DD.md` — 过程性记录
 - `MEMORY.md` — 长期经验
-- 通过 wiki 工具操作 `~/.openclaw/wiki/main/`,不直接读写文件
+- 通过 wiki 工具操作 wiki vault,不直接读写文件
 
 ## Lint 检查项
 
@@ -62,7 +62,7 @@
 - 重复或错放的页面
 - 跨领域错位(页面与 domain 子树不匹配)
 
-每次 lint 记入 `wiki/log.md`。
+每次 lint 后通过 `wiki_apply` 追加日志条目。
 
 ## Compare 模式
 
@@ -76,8 +76,8 @@
 
 文献查询时:
 1. 先 `wiki_status` 确认 vault 健康
-2. 读 `wiki/index.md` 找入口
-3. 读相关论文页和综合页
+2. 用 `wiki_get` 读索引页找入口
+3. 用 `wiki_get` 读相关论文页和综合页
 4. 基于 wiki 内容回答,引用 page_id
 5. 区分 evidence 和推断,标注缺口
 

@@ -22,7 +22,7 @@ User wants to query, compare, or synthesize information across papers already in
 
 #### Step 1: 知识检索 (main agent)
 
-1. Read `/workspace/shared/memory-wiki/index.md`, locate relevant pages.
+1. Use `wiki_get` to read the wiki index, locate relevant pages.
 2. Extract key facts related to the user query.
 3. If wiki insufficient, use browser to supplement (arXiv, Google Scholar).
 
