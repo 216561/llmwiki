@@ -147,7 +147,8 @@ When creating a new subagent:
 
 ## PR Rules
 
-- **Benchmark results required.** When a PR touches `benchmarks/` or any skill/agent that has benchmark coverage, the benchmark test results must be pasted into the PR description or a PR comment. Do not open a PR without them.
+- **Do not open upstream PRs before required verification.** 严禁在没有完成本地测试、或 forked repo 的 GitHub Actions benchmark CI 尚未通过时，向上游仓库开 PR。
+- **Benchmark results required.** When a PR touches `benchmarks/` or any skill/agent that has benchmark coverage, first run the relevant benchmark locally with `benchmarks/_common/run_local_benchmark.sh <name>`, then run the forked-repo `Benchmark` GitHub Actions workflow and wait for it to pass. Paste both local and forked-repo CI benchmark results into the PR description or a PR comment. Do not open a PR without them.
 - **Test new features before PR.** Every new feature (skill, agent, workflow, config change) must be tested via OpenClaw — actually trigger the agent in conversation and verify it works end-to-end. Do not open the PR without doing this.
 
 ## Gitignore Strategy

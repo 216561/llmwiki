@@ -238,20 +238,42 @@ bench_reapply_setup() {
   echo "[bench_reapply_setup] chown /home/node/.openclaw -> 1000:1000"
   bench_container_cli exec "${container}" chown -R 1000:1000 /home/node/.openclaw || true
   echo "[bench_reapply_setup] patching openclaw.json (SecretRef)"
-  bench_container_cli exec "${container}" python3 -c '
+  bench_container_cli exec -e LLM_MODEL "${container}" python3 -c '
 import json, os, pathlib
 p = pathlib.Path("/home/node/.openclaw/openclaw.json")
 data = json.loads(p.read_text(encoding="utf-8"))
-prov = data.setdefault("models", {}).setdefault("providers", {}).setdefault("minimax", {})
+# Resolve target provider + model id from LLM_MODEL, following the
+# `provider/model` convention used by ~/.openclaw/openclaw.json: the prefix
+# "AA" of "AA/BB" becomes models.providers.AA and "BB" the model id.
+# LLM_MODEL must contain a slash; a bare model name is rejected.
+llm_model = os.environ.get("LLM_MODEL", "")
+if "/" not in llm_model:
+    raise SystemExit(
+        "LLM_MODEL must be in 'provider/model' form (e.g. minimax/MiniMax-M2.7), got: %r" % llm_model
+    )
+_provider, _model_id = llm_model.split("/", 1)
+prov = data.setdefault("models", {}).setdefault("providers", {}).setdefault(_provider, {})
 prov["apiKey"] = {"source": "env", "provider": "default", "id": "LLM_API_KEY"}
 custom_base = os.environ.get("LLM_BASE_URL", "")
 default_base = "https://api.minimaxi.com/anthropic"
 if custom_base and custom_base != default_base:
     prov["baseUrl"] = custom_base
-    print(f"patched models.providers.minimax.baseUrl -> {custom_base}")
+    print(f"patched models.providers.{_provider}.baseUrl -> {custom_base}")
 default_prov = data.get("models", {}).get("providers", {}).pop("default", None)
 if default_prov is not None:
     print("removed models.providers.default overlay (not needed for bench)")
+# Repoint the provider model list to LLM_MODEL so the bench is not pinned
+# to MiniMax-M2.7.
+_template = prov.get("models", [{}])[0] if prov.get("models") else {}
+_new_model = dict(_template)
+_new_model["id"] = _model_id
+_new_model["name"] = _model_id
+prov["models"] = [_new_model]
+data.setdefault("agents", {}).setdefault("defaults", {})["model"] = {
+    "primary": f"{_provider}/{_model_id}", "fallbacks": []
+}
+print(f"patched models.providers.{_provider}.models -> [{_model_id}]")
+print(f"patched agents.defaults.model.primary -> {_provider}/{_model_id}")
 # Sandbox mode requires Docker-in-Docker which is not available in CI/local bench containers.
 agents = data.setdefault("agents", {})
 defaults = agents.setdefault("defaults", {})
@@ -261,7 +283,7 @@ defaults["elevatedDefault"] = "full"
 tools = data.setdefault("tools", {})
 tools.setdefault("exec", {})["mode"] = "full"
 p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-print("patched models.providers.minimax.apiKey -> SecretRef(LLM_API_KEY)")
+print(f"patched models.providers.{_provider}.apiKey -> SecretRef(LLM_API_KEY)")
 print("patched agents.defaults.sandbox.mode -> off")
 print("patched agents.defaults.elevatedDefault -> full")
 print("patched tools.exec.mode -> full (no-approval)")
