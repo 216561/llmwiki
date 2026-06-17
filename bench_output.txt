@@ -1,0 +1,51 @@
+[local-bench] benchmark=autoresearch-1 runtime=auto run_id=local-autoresearch-1-549
+
+[env_setup] loading /d/llmwiki-repo/docker/.env.bench
+
+[env_setup] writing /d/llmwiki-repo/.bench-runtime/.env.bench
+
+[env_setup] pre-seeding openclaw.json in data dir to avoid gateway config errors
+
+[env_setup] using runtime=docker cli=docker
+
+[env_setup] pulling acautomata/openclaw-docker-cn-im:latest
+
+[env_setup] bringing up container (project=openclaw-bench-local-autoresearch-1-549, --force-recreate)
+ Network openclaw-bench-local-autoresearch-1-549_default Creating 
+ Network openclaw-bench-local-autoresearch-1-549_default Created 
+ Container openclaw-bench Creating 
+ Container openclaw-bench Created 
+ Container openclaw-bench Starting 
+ Container openclaw-bench Started 
+
+[env_setup] container: openclaw-bench
+
+[env_setup] copy repo into openclaw-bench:/home/node/.openclaw
+[bench_reapply_setup] copy repo into openclaw-bench:/home/node/.openclaw
+[bench_reapply_setup] creating agent session dirs
+[bench_reapply_setup] chown /home/node/.openclaw -> 1000:1000
+[bench_reapply_setup] patching openclaw.json (SecretRef)
+patched models.providers.deepseek.baseUrl -> https://api.deepseek.com
+patched models.providers.deepseek.models -> [deepseek-v4-flash]
+patched agents.defaults.model.primary -> deepseek/deepseek-v4-flash
+patched models.providers.deepseek.apiKey -> SecretRef(LLM_API_KEY)
+patched agents.defaults.sandbox.mode -> off
+patched agents.defaults.elevatedDefault -> full
+patched tools.exec.mode -> full (no-approval)
+
+[env_setup] repo copied into container
+
+[env_setup] SecretRef patch applied via bench_reapply_setup (no restart)
+[bench_wait_ready] waiting for openclaw-bench to come up and gateway to be ready
+[bench_wait_ready] openclaw-bench is up and gateway is ready after 1 polls
+
+[env_setup] ready: runtime=docker container=openclaw-bench mount=/home/node/.openclaw data_dir=/d/llmwiki-repo/.bench-runtime/openclaw-data
+
+[env_setup] runtime env file: /d/llmwiki-repo/.bench-runtime/bench-runtime-env.sh
+[local-bench] running env.sh
+[bench_force_recreate] bringing up openclaw-bench --force-recreate (runtime=docker, project=openclaw-bench-local-autoresearch-1-549)
+ Container openclaw-bench Recreate 
+ Container openclaw-bench Recreated 
+ Container openclaw-bench Starting 
+ Container openclaw-bench Started 
+[bench_reapply_setup] copy repo into openclaw-bench:/home/node/.openclaw

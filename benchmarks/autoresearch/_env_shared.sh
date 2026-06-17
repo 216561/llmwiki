@@ -25,6 +25,20 @@ if ! declare -F bench_container_cli >/dev/null; then
   }
 fi
 
+# ── 0. Fix API key: write directly (SecretRef fails with gateway snapshot) ──
+if [[ -n "${LLM_API_KEY:-}" ]]; then
+  log "patching LLM_API_KEY directly into openclaw.json"
+  bench_container_cli exec "${BENCH_CONTAINER}" python3 -c "
+import json, os
+p = '/home/node/.openclaw/openclaw.json'
+d = json.load(open(p))
+prov = d.setdefault('models',{}).setdefault('providers',{}).setdefault('deepseek',{})
+prov['apiKey'] = os.environ.get('LLM_API_KEY','')
+json.dump(d, open(p,'w'), indent=2)
+print('patched apiKey directly')
+"
+fi
+
 # ── 1. Stage wiki fixtures into the wiki vault ─────────────────────
 # openclaw.json configures memory-wiki vault at ~/.openclaw/wiki/main.
 # QA prompts reference wiki files via this vault path.
