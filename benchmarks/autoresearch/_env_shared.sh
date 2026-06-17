@@ -1,12 +1,9 @@
 #!/usr/bin/env bash
 # benchmarks/autoresearch/_env_shared.sh
 set -euo pipefail
-
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HERE="$(cd "$(dirname "$0")" && pwd)"
 log() { printf '\n[autoresearch.env] %s\n' "$*"; }
-
-# Bring up a fresh container for this shard.
-if [[ -n "${BENCH_ENV_FILE:-}" && -f "${BENCH_ENV_FILE}" ]]; then
+if [[ -f "${BENCH_ENV_FILE}" ]]; then
   . "${BENCH_ENV_FILE}"
   bench_force_recreate
 fi
@@ -17,36 +14,6 @@ if ! declare -F bench_container_cli >/dev/null; then
     "${cli}" "$@"
   }
 fi
-
-# ── 0. Fix API key ──
-if [[ -n "${LLM_API_KEY:-}" ]]; then
-  log "patching LLM_API_KEY directly into openclaw.json"
-  bench_container_cli exec "${BENCH_CONTAINER}" python3 -c "
-import json, os
-p = '/home/node/.openclaw/openclaw.json'
-d = json.load(open(p))
-prov = d.setdefault('models',{}).setdefault('providers',{}).setdefault('deepseek',{})
-prov['apiKey'] = os.environ.get('LLM_API_KEY','')
-json.dump(d, open(p,'w'), indent=2)
-print('patched apiKey directly')
-"
-fi
-
-# ── 1. Stage wiki fixtures into the wiki vault ──
-WIKI_VAULT="${BENCH_MOUNT}/wiki/main"
-WIKI_SRC="${HERE}/wiki"
-
-if [[ -d "${WIKI_SRC}" ]]; then
-  log "staging wiki knowledge base -> ${WIKI_VAULT}"
-  bench_container_cli exec "${BENCH_CONTAINER}" mkdir -p "${WIKI_VAULT}"
-  tar -C "${WIKI_SRC}" -cf - . 2>/dev/null | \
-    bench_container_cli exec -i "${BENCH_CONTAINER}" tar -xf - -C "${WIKI_VAULT}" 2>/dev/null || true
-  local wiki_count
-  wiki_count="$(find "${WIKI_SRC}" -name '*.md' | wc -l)"
-  log "staged ${wiki_count} wiki pages into vault"
-fi
-
-# ── 2. Link benchmarks/ into workspace ──
 log "linking repo benchmarks into workspace"
 bench_container_cli exec "${BENCH_CONTAINER}" bash -lc \
   "for ws in workspace workspace/curate workspace/judge; do
@@ -54,5 +21,4 @@ bench_container_cli exec "${BENCH_CONTAINER}" bash -lc \
      rm -f '${BENCH_MOUNT}/\${ws}/benchmarks'
      ln -s '${BENCH_MOUNT}/benchmarks' '${BENCH_MOUNT}/\${ws}/benchmarks'
    done"
-
 log "env ready"
