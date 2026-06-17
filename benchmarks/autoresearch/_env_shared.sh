@@ -51,7 +51,7 @@ fi
 # ── 2. Link benchmarks/ into workspace ───
 log "linking repo benchmarks into workspace"
 bench_container_cli exec "${BENCH_CONTAINER}" bash -lc \
-  "for ws in workspace workspace/curate workspace/judge; do
+  "for ws in workspace workspace/main workspace/curate workspace/judge; do
      mkdir -p '${BENCH_MOUNT}/\${ws}'
      rm -f '${BENCH_MOUNT}/\${ws}/benchmarks'
      ln -s '${BENCH_MOUNT}/benchmarks' '${BENCH_MOUNT}/\${ws}/benchmarks'
