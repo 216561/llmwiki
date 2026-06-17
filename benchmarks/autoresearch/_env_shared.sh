@@ -23,7 +23,7 @@ fi
 # ── 0. Fix API key ──
 if [[ -n "${LLM_API_KEY:-}" ]]; then
   log "patching LLM_API_KEY"
-  bench_container_cli exec "${BENCH_CONTAINER}" python3 -c "
+  docker exec "${BENCH_CONTAINER}" python3 -c "
 import json, os
 p='/home/node/.openclaw/openclaw.json'
 d=json.load(open(p))
@@ -39,10 +39,10 @@ WIKI_VAULT="/home/node/.openclaw/wiki/main"
 
 if [[ -d "${WIKI_SRC}" ]]; then
   log "staging wiki: ${WIKI_SRC} -> ${WIKI_VAULT}"
-  bench_container_cli exec "${BENCH_CONTAINER}" mkdir -p "${WIKI_VAULT}"
+  docker exec "${BENCH_CONTAINER}" mkdir -p "${WIKI_VAULT}"
   tar -C "${WIKI_SRC}" -cf - . 2>/dev/null | \
-    bench_container_cli exec -i "${BENCH_CONTAINER}" tar -xf - -C "${WIKI_VAULT}" 2>/dev/null || true
-  n=$(bench_container_cli exec "${BENCH_CONTAINER}" find "${WIKI_VAULT}" -name '*.md' 2>/dev/null | wc -l)
+    docker exec -i "${BENCH_CONTAINER}" tar -xf - -C "${WIKI_VAULT}" 2>/dev/null || true
+  n=$(docker exec "${BENCH_CONTAINER}" find "${WIKI_VAULT}" -name '*.md' 2>/dev/null | wc -l)
   log "staged ${n} wiki pages into vault"
 else
   log "WARNING: wiki dir not found: ${WIKI_SRC}"
@@ -50,8 +50,8 @@ fi
 
 # ── 2. Link benchmarks/ into workspace ──
 log "linking benchmarks into workspace"
-bench_container_cli exec "${BENCH_CONTAINER}" bash -lc \
-  "for ws in workspace workspace/curate workspace/judge; do
+docker exec "${BENCH_CONTAINER}" bash -lc \
+  "for ws in workspace workspace/main workspace/curate workspace/judge; do
      mkdir -p '/home/node/.openclaw/\${ws}'
      rm -f '/home/node/.openclaw/\${ws}/benchmarks'
      ln -s /home/node/.openclaw/benchmarks '/home/node/.openclaw/\${ws}/benchmarks'
