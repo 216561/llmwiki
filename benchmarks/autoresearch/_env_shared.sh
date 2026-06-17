@@ -41,8 +41,9 @@ WIKI_SRC="${HERE}/wiki"
 if [[ -d "${WIKI_SRC}" ]]; then
   log "staging wiki knowledge base -> ${WIKI_VAULT}"
   bench_container_cli exec "${BENCH_CONTAINER}" mkdir -p "${WIKI_VAULT}"
-  tar -C "${WIKI_SRC}" -cf - . | \
-    bench_container_cli exec -i "${BENCH_CONTAINER}" tar -xf - -C "${WIKI_VAULT}"
+  tar -C "${WIKI_SRC}" -cf - . 2>/dev/null | \
+    bench_container_cli exec -i "${BENCH_CONTAINER}" tar -xf - -C "${WIKI_VAULT}" 2>/dev/null || \
+    log "WARNING: wiki tar pipe failed, agent will use repo-copy symlink fallback"
   local wiki_count
   wiki_count="$(find "${WIKI_SRC}" -name '*.md' | wc -l)"
   log "staged ${wiki_count} wiki pages into vault"
@@ -51,7 +52,7 @@ fi
 # ── 2. Link benchmarks/ into workspace ───
 log "linking repo benchmarks into workspace"
 bench_container_cli exec "${BENCH_CONTAINER}" bash -lc \
-  "for ws in workspace workspace/main workspace/curate workspace/judge; do
+  "for ws in workspace workspace/curate workspace/judge; do
      mkdir -p '${BENCH_MOUNT}/\${ws}'
      rm -f '${BENCH_MOUNT}/\${ws}/benchmarks'
      ln -s '${BENCH_MOUNT}/benchmarks' '${BENCH_MOUNT}/\${ws}/benchmarks'
