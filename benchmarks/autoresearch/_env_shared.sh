@@ -20,34 +20,39 @@ fi
 
 # ── 0. Fix API key ──
 if [[ -n "${LLM_API_KEY:-}" ]]; then
-  log "patching LLM_API_KEY"
+  log "patching LLM_API_KEY directly into openclaw.json"
   bench_container_cli exec "${BENCH_CONTAINER}" python3 -c "
-import json,os
-p='/home/node/.openclaw/openclaw.json'
-d=json.load(open(p))
-prov=d.setdefault('models',{}).setdefault('providers',{}).setdefault('deepseek',{})
-prov['apiKey']=os.environ.get('LLM_API_KEY','')
-json.dump(d,open(p,'w'),indent=2)
-" 2>/dev/null || true
+import json, os
+p = '/home/node/.openclaw/openclaw.json'
+d = json.load(open(p))
+prov = d.setdefault('models',{}).setdefault('providers',{}).setdefault('deepseek',{})
+prov['apiKey'] = os.environ.get('LLM_API_KEY','')
+json.dump(d, open(p,'w'), indent=2)
+print('patched apiKey directly')
+"
 fi
 
-# ── 1. Copy wiki directly to both locations the agent might look ──
+# ── 1. Stage wiki fixtures into the wiki vault ──
+WIKI_VAULT="${BENCH_MOUNT}/wiki/main"
 WIKI_SRC="${HERE}/wiki"
+
 if [[ -d "${WIKI_SRC}" ]]; then
-  n=$(find "${WIKI_SRC}" -name '*.md' | wc -l)
-  log "copying ${n} wiki pages into container..."
-
-  # Path A: wiki vault
-  bench_container_cli exec "${BENCH_CONTAINER}" mkdir -p /home/node/.openclaw/wiki/main
-  bench_container_cli cp "${WIKI_SRC}/." "${BENCH_CONTAINER}:/home/node/.openclaw/wiki/main/" 2>/dev/null || true
-
-  # Path B: benchmarks tree (where QA paths point)
-  bench_container_cli exec "${BENCH_CONTAINER}" mkdir -p /home/node/.openclaw/benchmarks/autoresearch/wiki
-  bench_container_cli cp "${WIKI_SRC}/." "${BENCH_CONTAINER}:/home/node/.openclaw/benchmarks/autoresearch/wiki/" 2>/dev/null || true
-
-  log "wiki copied to container"
-else
-  log "WARNING: wiki dir not found: ${WIKI_SRC}"
+  log "staging wiki knowledge base -> ${WIKI_VAULT}"
+  bench_container_cli exec "${BENCH_CONTAINER}" mkdir -p "${WIKI_VAULT}"
+  tar -C "${WIKI_SRC}" -cf - . 2>/dev/null | \
+    bench_container_cli exec -i "${BENCH_CONTAINER}" tar -xf - -C "${WIKI_VAULT}" 2>/dev/null || true
+  local wiki_count
+  wiki_count="$(find "${WIKI_SRC}" -name '*.md' | wc -l)"
+  log "staged ${wiki_count} wiki pages into vault"
 fi
+
+# ── 2. Link benchmarks/ into workspace ──
+log "linking repo benchmarks into workspace"
+bench_container_cli exec "${BENCH_CONTAINER}" bash -lc \
+  "for ws in workspace workspace/curate workspace/judge; do
+     mkdir -p '${BENCH_MOUNT}/\${ws}'
+     rm -f '${BENCH_MOUNT}/\${ws}/benchmarks'
+     ln -s '${BENCH_MOUNT}/benchmarks' '${BENCH_MOUNT}/\${ws}/benchmarks'
+   done"
 
 log "env ready"
