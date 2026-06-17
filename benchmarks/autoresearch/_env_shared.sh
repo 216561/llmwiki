@@ -9,7 +9,7 @@
 # qa.jsonl is read by run_bench.py on the host — no need to stage it.
 set -euo pipefail
 
-HERE="$(cd "$(dirname "$0")" && pwd)"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 log() { printf '\n[autoresearch.env] %s\n' "$*"; }
 
 # Bring up a fresh container for this shard.
